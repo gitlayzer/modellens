@@ -1,0 +1,10 @@
+.git
+.gitignore
+node_modules
+src
+tailwind.config.js
+*.md
+.dockerignore
+Dockerfile
+docker-compose.yml
+.DS_Store
