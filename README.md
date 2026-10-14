@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | subscription | `{v1}/dashboard/billing/subscription` | OpenAI 及兼容中转（额度、`access_until` 到期时间） |
 | billing_usage | `{v1}/dashboard/billing/usage` | OpenAI 及兼容中转（本月用量） |
+| v1_usage | `{v1}/usage` | sub2api 等中转（窗口限额、`reset_at` 重置时间、到期时间） |
 | newapi_self | `{root}/api/user/self` | new-api / one-api 系中转（剩余额度、已用额度） |
 
 前端会自动从返回中提取重置/到期时间（`reset`、`access_until`、`expire` 等字段）并高亮倒计时，额度类字段换算展示（new-api quota 按 $1 = 500,000 quota 换算）。探测失败不影响模型列表查询。

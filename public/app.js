@@ -157,23 +157,31 @@
   const USAGE_KIND_LABEL = {
     subscription: 'billing/subscription',
     billing_usage: 'billing/usage',
+    v1_usage: 'v1/usage',
     newapi_self: 'new-api user/self',
   };
   // 重置/到期类字段：值若能解析成时间则进入高亮块
   const RESET_RE = /(reset|renew|refresh|expire|access_until|valid_until|deadline|until|end_time|endtime)/i;
   // 额度/用量类字段：进入字段网格
-  const AMOUNT_RE = /(balance|remain|quota|credit|limit|grant|usage|used|spend|cost|amount|total|request_count)/i;
-  const NOISE_RE = /(password|secret|token|session|email|avatar|group|setting|aff_)/i;
+  const AMOUNT_RE = /(balance|remain|quota|credit|limit|grant|usage|used|spend|cost|amount|total|request|token|days_until|status|mode|isvalid|window)/i;
+  const NOISE_RE = /(password|secret|token_|session|email|avatar|group|setting|aff_)/i;
   const FIELD_LABELS = {
     hard_limit_usd: '硬限额', soft_limit_usd: '软限额', total_usage: '本月用量',
     total_granted: '总额度', total_used: '已用额度', quota: '剩余额度',
     used_quota: '已用额度', request_count: '请求次数', balance: '余额',
     remain_quota: '剩余额度', access_until: '有效至', expired_time: '过期时间',
+    expires_at: '到期时间', days_until_expiry: '剩余天数', reset_at: '重置时间',
+    cost: '费用', actual_cost: '实际费用', requests: '请求数', total_tokens: '总 Tokens',
+    input_tokens: '输入 Tokens', output_tokens: '输出 Tokens', limit: '窗口限额',
+    remaining: '窗口剩余', used: '窗口已用', window: '窗口周期', status: '状态',
+    mode: '计费模式', isValid: '密钥有效', rpm: '当前 RPM', tpm: '当前 TPM',
   };
 
+  // 展开 JSON 里的标量字段；超长数组（如 daily_usage 时间序列）整体跳过，避免刷屏
   function flattenScalars(obj, path, out) {
     if (obj === null || obj === undefined) return;
     if (Array.isArray(obj)) {
+      if (obj.length > 5) return;
       obj.forEach((v, i) => flattenScalars(v, `${path}[${i}]`, out));
     } else if (typeof obj === 'object') {
       for (const k of Object.keys(obj)) flattenScalars(obj[k], path ? `${path}.${k}` : k, out);
@@ -223,6 +231,10 @@
       if (probe.kind === 'billing_usage' && f.key === 'total_usage') {
         return `$${(v / 100).toFixed(2)}`;
       }
+      // cost/balance/limit 类金额字段按美元展示
+      if (/(cost|balance|amount)/i.test(f.key) || (probe.kind === 'v1_usage' && /^(limit|remaining|used)$/.test(f.key))) {
+        return `$${Number(v.toFixed(4)).toLocaleString()}`;
+      }
       if (/_usd$/i.test(f.key)) return `$${v.toLocaleString()}`;
       return v.toLocaleString();
     }
@@ -259,10 +271,19 @@
     if (chosen) {
       resetBlock.classList.remove('hidden');
       $('usage-reset-label').textContent =
-        (future ? '下次重置时间' : '重置/到期时间') +
-        (chosen.label && !/^access_until$/i.test(chosen.label) ? ` · ${chosen.label}` : '');
+        (future ? '下次重置时间' : '重置/到期时间') + (chosen.label ? ` · ${chosen.label}` : '');
       $('usage-reset-time').textContent = formatDateTime(chosen.date);
       $('usage-reset-countdown').textContent = formatCountdown(chosen.date);
+      // 其余时间候选（如密钥到期时间）以小字行列出
+      const othersBox = $('usage-reset-others');
+      const others = resetCandidates.filter((c) => c !== chosen).slice(0, 3);
+      othersBox.innerHTML = '';
+      others.forEach((c) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-baseline justify-between gap-4 font-mono text-[11px] text-zinc-500';
+        row.innerHTML = `<span>${escapeHtml(c.label)}</span><span class="tabular-nums">${formatDateTime(c.date)} · ${formatCountdown(c.date)}</span>`;
+        othersBox.appendChild(row);
+      });
     } else {
       resetBlock.classList.add('hidden');
     }
@@ -271,16 +292,21 @@
     const dl = $('usage-fields');
     dl.innerHTML = '';
     const seen = new Set();
+    const labelCount = {};
     okProbes.forEach((p) => {
       const flat = [];
       flattenScalars(p.data, '', flat);
       flat.forEach((f) => {
         if (!AMOUNT_RE.test(f.key) || NOISE_RE.test(f.key)) return;
         if (RESET_RE.test(f.key) && parseMaybeDate(f.value)) return; // 时间类已进高亮块
+        if (typeof f.value === 'string' && parseMaybeDate(f.value)) return; // 网格里不放日期字符串
         const dedup = `${p.kind}:${f.path}`;
         if (seen.has(dedup)) return;
         seen.add(dedup);
-        const label = FIELD_LABELS[f.key] || f.key;
+        let label = FIELD_LABELS[f.key] || f.key;
+        labelCount[label] = (labelCount[label] || 0) + 1;
+        // 同名字段（如 usage.today.cost 与 usage.total.cost）用路径区分
+        if (labelCount[label] > 1) label = f.path.replace(/^data\./, '');
         const div = document.createElement('div');
         div.className = 'min-w-0';
         div.innerHTML = `

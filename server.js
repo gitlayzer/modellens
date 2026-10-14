@@ -50,6 +50,7 @@ function deriveUsageProbeUrls(modelsUrl) {
   return [
     { kind: 'subscription', url: `${v1Base}/dashboard/billing/subscription` },
     { kind: 'billing_usage', url: `${v1Base}/dashboard/billing/usage?start_date=${fmt(monthStart)}&end_date=${fmt(now + 86400000)}` },
+    { kind: 'v1_usage', url: `${v1Base}/usage` },
     { kind: 'newapi_self', url: `${root}/api/user/self` },
   ];
 }
