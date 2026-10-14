@@ -36,6 +36,63 @@ function buildHeaders(apiKey, headerType) {
   return headers;
 }
 
+// 从 /models 地址推导常见的用量/额度查询地址：
+//   OpenAI billing 风格：{v1}/dashboard/billing/subscription、{v1}/dashboard/billing/usage
+//   new-api/one-api 风格：{root}/api/user/self
+function deriveUsageProbeUrls(modelsUrl) {
+  const parsed = new URL(modelsUrl);
+  const v1Base = parsed.origin + parsed.pathname.replace(/\/models$/i, '');
+  const root = parsed.origin;
+  const now = Date.now();
+  const fmt = (t) => new Date(t).toISOString().slice(0, 10);
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  return [
+    { kind: 'subscription', url: `${v1Base}/dashboard/billing/subscription` },
+    { kind: 'billing_usage', url: `${v1Base}/dashboard/billing/usage?start_date=${fmt(monthStart)}&end_date=${fmt(now + 86400000)}` },
+    { kind: 'newapi_self', url: `${root}/api/user/self` },
+  ];
+}
+
+// 并行探测全部 usage 端点；任何失败都不影响主流程，逐个记录状态
+async function probeUsageEndpoints(modelsUrl, headers) {
+  const probes = deriveUsageProbeUrls(modelsUrl).map(async (p) => {
+    const started = Date.now();
+    try {
+      const resp = await fetch(p.url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(8000),
+        redirect: 'follow',
+      });
+      const text = await resp.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch { /* 非 JSON（如登录页 HTML） */ }
+      return {
+        kind: p.kind,
+        url: p.url,
+        status: resp.status,
+        ok: resp.ok && data !== null,
+        latencyMs: Date.now() - started,
+        data,
+        error: data === null ? '响应不是 JSON' : (resp.ok ? null : `HTTP ${resp.status}`),
+      };
+    } catch (err) {
+      const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';
+      return {
+        kind: p.kind,
+        url: p.url,
+        status: null,
+        ok: false,
+        latencyMs: Date.now() - started,
+        data: null,
+        error: isTimeout ? '请求超时' : err.message,
+      };
+    }
+  });
+  return { probes: await Promise.all(probes) };
+}
+
 async function handleModelsQuery(req, res) {
   let body = '';
   for await (const chunk of req) body += chunk;
@@ -60,6 +117,8 @@ async function handleModelsQuery(req, res) {
   }
 
   const started = Date.now();
+  // 与 /models 查询并行探测用量端点，结果附加在响应的 usage 字段里
+  const usagePromise = probeUsageEndpoints(targetUrl, buildHeaders(apiKey, headerType));
   try {
     const upstream = await fetch(targetUrl, {
       method: 'GET',
@@ -81,6 +140,7 @@ async function handleModelsQuery(req, res) {
         latencyMs,
         error: '上游返回的不是 JSON',
         upstreamBody: text.slice(0, 600),
+        usage: await usagePromise,
       });
     }
 
@@ -92,6 +152,7 @@ async function handleModelsQuery(req, res) {
         latencyMs,
         error: `上游返回 HTTP ${upstream.status}`,
         upstreamBody: data,
+        usage: await usagePromise,
       });
     }
 
@@ -114,6 +175,7 @@ async function handleModelsQuery(req, res) {
       count: models.length,
       models,
       raw: data,
+      usage: await usagePromise,
     });
   } catch (err) {
     const isTimeout = err.name === 'TimeoutError' || err.name === 'AbortError';

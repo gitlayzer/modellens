@@ -137,7 +137,7 @@
   renderHistory();
 
   /* ---------- 加载态轮换文案 ---------- */
-  const LOADING_PHRASES = ['正在规范化请求地址', '正在连接目标端点', '等待上游响应', '正在解析模型列表'];
+  const LOADING_PHRASES = ['正在规范化请求地址', '正在连接目标端点', '等待上游响应', '正在解析模型列表', '正在探测用量接口'];
   function startLoadingPhrases() {
     let i = 0;
     const el = $('loading-text');
@@ -151,6 +151,170 @@
   function stopLoadingPhrases() {
     clearInterval(loadingTimer);
     loadingTimer = null;
+  }
+
+  /* ---------- 用量 / 额度渲染 ---------- */
+  const USAGE_KIND_LABEL = {
+    subscription: 'billing/subscription',
+    billing_usage: 'billing/usage',
+    newapi_self: 'new-api user/self',
+  };
+  // 重置/到期类字段：值若能解析成时间则进入高亮块
+  const RESET_RE = /(reset|renew|refresh|expire|access_until|valid_until|deadline|until|end_time|endtime)/i;
+  // 额度/用量类字段：进入字段网格
+  const AMOUNT_RE = /(balance|remain|quota|credit|limit|grant|usage|used|spend|cost|amount|total|request_count)/i;
+  const NOISE_RE = /(password|secret|token|session|email|avatar|group|setting|aff_)/i;
+  const FIELD_LABELS = {
+    hard_limit_usd: '硬限额', soft_limit_usd: '软限额', total_usage: '本月用量',
+    total_granted: '总额度', total_used: '已用额度', quota: '剩余额度',
+    used_quota: '已用额度', request_count: '请求次数', balance: '余额',
+    remain_quota: '剩余额度', access_until: '有效至', expired_time: '过期时间',
+  };
+
+  function flattenScalars(obj, path, out) {
+    if (obj === null || obj === undefined) return;
+    if (Array.isArray(obj)) {
+      obj.forEach((v, i) => flattenScalars(v, `${path}[${i}]`, out));
+    } else if (typeof obj === 'object') {
+      for (const k of Object.keys(obj)) flattenScalars(obj[k], path ? `${path}.${k}` : k, out);
+    } else if (typeof obj === 'number' || typeof obj === 'string' || typeof obj === 'boolean') {
+      out.push({ path, key: path.split(/[.\[\]]/).filter(Boolean).pop() || path, value: obj });
+    }
+  }
+
+  function parseMaybeDate(value) {
+    if (typeof value === 'number' && isFinite(value)) {
+      if (value > 1e9 && value < 1e12) return new Date(value * 1000); // unix 秒
+      if (value >= 1e12 && value < 1e14) return new Date(value);      // unix 毫秒
+      return null;
+    }
+    if (typeof value === 'string') {
+      if (/^\d{10,13}$/.test(value)) return parseMaybeDate(Number(value));
+      const d = new Date(value);
+      if (!isNaN(d) && /[-T:]/.test(value)) return d;
+    }
+    return null;
+  }
+
+  function formatDateTime(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  function formatCountdown(target) {
+    const ms = target - Date.now();
+    if (ms <= 0) return '已到期';
+    const mins = Math.floor(ms / 60000);
+    const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+    if (d > 0) return `${d} 天 ${h} 小时后`;
+    if (h > 0) return `${h} 小时 ${m} 分后`;
+    return `${m} 分钟后`;
+  }
+
+  function formatFieldValue(probe, f) {
+    const v = f.value;
+    if (typeof v === 'boolean') return v ? '是' : '否';
+    if (typeof v === 'number') {
+      // new-api 系：quota 以 1/500000 美元为单位
+      if (probe.kind === 'newapi_self' && /quota/i.test(f.key)) {
+        return `${v.toLocaleString()}（≈ $${(v / 500000).toFixed(2)}）`;
+      }
+      // OpenAI billing usage：total_usage 单位是美分
+      if (probe.kind === 'billing_usage' && f.key === 'total_usage') {
+        return `$${(v / 100).toFixed(2)}`;
+      }
+      if (/_usd$/i.test(f.key)) return `$${v.toLocaleString()}`;
+      return v.toLocaleString();
+    }
+    return String(v);
+  }
+
+  function renderUsage(usage) {
+    const card = $('usage-card');
+    if (!usage || !Array.isArray(usage.probes)) { card.classList.add('hidden'); return; }
+    card.classList.remove('hidden');
+
+    const probes = usage.probes;
+    const okProbes = probes.filter((p) => p.ok && p.data && typeof p.data === 'object');
+    $('usage-probe-summary').textContent = `已探测 ${probes.length} 个接口 · ${okProbes.length} 个返回数据`;
+
+    // 1) 重置/到期时间：所有成功探测里找候选，优先展示未来最近的
+    const resetCandidates = [];
+    okProbes.forEach((p) => {
+      const flat = [];
+      flattenScalars(p.data, '', flat);
+      flat.forEach((f) => {
+        if (!RESET_RE.test(f.key) || NOISE_RE.test(f.key)) return;
+        const d = parseMaybeDate(f.value);
+        if (d && d.getFullYear() > 2000 && d.getFullYear() < 2100) {
+          resetCandidates.push({ date: d, label: f.key, kind: p.kind });
+        }
+      });
+    });
+    resetCandidates.sort((a, b) => a.date - b.date);
+    const future = resetCandidates.find((c) => c.date > Date.now());
+    const chosen = future || resetCandidates[resetCandidates.length - 1];
+
+    const resetBlock = $('usage-reset-block');
+    if (chosen) {
+      resetBlock.classList.remove('hidden');
+      $('usage-reset-label').textContent =
+        (future ? '下次重置时间' : '重置/到期时间') +
+        (chosen.label && !/^access_until$/i.test(chosen.label) ? ` · ${chosen.label}` : '');
+      $('usage-reset-time').textContent = formatDateTime(chosen.date);
+      $('usage-reset-countdown').textContent = formatCountdown(chosen.date);
+    } else {
+      resetBlock.classList.add('hidden');
+    }
+
+    // 2) 额度/用量字段网格
+    const dl = $('usage-fields');
+    dl.innerHTML = '';
+    const seen = new Set();
+    okProbes.forEach((p) => {
+      const flat = [];
+      flattenScalars(p.data, '', flat);
+      flat.forEach((f) => {
+        if (!AMOUNT_RE.test(f.key) || NOISE_RE.test(f.key)) return;
+        if (RESET_RE.test(f.key) && parseMaybeDate(f.value)) return; // 时间类已进高亮块
+        const dedup = `${p.kind}:${f.path}`;
+        if (seen.has(dedup)) return;
+        seen.add(dedup);
+        const label = FIELD_LABELS[f.key] || f.key;
+        const div = document.createElement('div');
+        div.className = 'min-w-0';
+        div.innerHTML = `
+          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-600 truncate" title="${escapeHtml(p.kind)} · ${escapeHtml(f.path)}">${escapeHtml(label)}</dt>
+          <dd class="mt-1 font-mono text-[13px] text-zinc-200 tabular-nums break-all">${escapeHtml(formatFieldValue(p, f))}</dd>`;
+        dl.appendChild(div);
+      });
+    });
+
+    $('usage-empty').classList.toggle('hidden', okProbes.length > 0);
+
+    // 3) 每个探测源的状态 + 可折叠原始响应
+    const box = $('usage-probes');
+    box.innerHTML = '';
+    probes.forEach((p) => {
+      const row = document.createElement(p.ok ? 'details' : 'div');
+      row.className = 'rounded-lg border border-white/[0.05] bg-ink-850/60';
+      const head = `
+        <span class="inline-flex items-center gap-2 min-w-0">
+          <span class="h-1.5 w-1.5 rounded-full ${p.ok ? 'bg-emerald-400' : 'bg-zinc-600'}"></span>
+          <span class="font-mono text-[11px] text-zinc-400 truncate">${escapeHtml(USAGE_KIND_LABEL[p.kind] || p.kind)}</span>
+          ${p.ok ? `<span class="font-mono text-[10px] text-emerald-300/80">HTTP ${p.status}</span>` : `<span class="font-mono text-[10px] text-zinc-600">${escapeHtml(p.error || `HTTP ${p.status}`)}</span>`}
+        </span>
+        <span class="font-mono text-[10px] text-zinc-700 tabular-nums">${p.latencyMs} ms</span>`;
+      if (p.ok) {
+        row.innerHTML = `
+          <summary class="flex items-center justify-between gap-3 cursor-pointer px-3.5 py-2.5 list-none hover:bg-white/[0.02] rounded-lg transition-colors">${head}</summary>
+          <pre class="max-h-56 overflow-auto scroll-slim border-t border-white/[0.05] px-3.5 py-3 font-mono text-[11px] leading-relaxed text-zinc-500"></pre>`;
+        row.querySelector('pre').textContent = JSON.stringify(p.data, null, 2);
+      } else {
+        row.innerHTML = `<div class="flex items-center justify-between gap-3 px-3.5 py-2.5">${head}</div>`;
+      }
+      box.appendChild(row);
+    });
   }
 
   /* ---------- 提交查询 ---------- */
@@ -206,6 +370,7 @@
       $('raw-toggle').textContent = '查看原始 JSON';
       $('filter-input').value = '';
       renderModels();
+      renderUsage(data.usage);
       showState('result');
       saveHistory(baseUrl);
     } catch (err) {
