@@ -99,27 +99,34 @@
     </aside>
 
     <section class="workspace row-in" style="--i:2">
-      <div id="state-empty" class="state-pane">
-        <div class="rounded-2xl bg-ink-850 border border-white/[0.06] p-4">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
+      <div id="state-empty" class="state-pane empty-state">
+        <div class="empty-head"><span>开始一次端点探测</span><span>MODELS + USAGE</span></div>
+        <div class="empty-body">
+          <div class="intro">
+            <div class="intro-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg></div>
+            <h2>一个端点，<br>模型和用量都看清。</h2>
+            <p>填入左侧的 Base URL 和 API Key。查询后，这里会分成两个 Tab，分别展示完整模型列表与额度计费详情。</p>
+            <div class="benefits">
+              <div class="benefit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h16M4 18h10"/></svg>模型再多，也只在面板内滚动</div>
+              <div class="benefit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>重置时间与剩余额度优先展示</div>
+              <div class="benefit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 5 6v5c0 4.5 2.8 8 7 10 4.2-2 7-5.5 7-10V6l-7-3Z"/></svg>密钥只转发，不会保存</div>
+            </div>
+          </div>
+          <div class="preview" aria-label="查询结果预览">
+            <div class="request"><span class="get">GET</span><span class="path">/v1/models</span><span class="ok">200 OK</span></div>
+            <div class="preview-tabs"><span class="active">模型</span><span>用量与计费</span></div>
+            <div class="preview-content">
+              <div class="mini-models"><div class="mini-title">模型列表 · 268</div><div class="mini-row"><span>MiniMax-M2.1</span><span>openai</span></div><div class="mini-row"><span>MiniMax-M2.5</span><span>openai</span></div><div class="mini-row"><span>claude-sonnet-5</span><span>anthropic</span></div><div class="mini-row"><span>gpt-5.6-sol</span><span>openai</span></div></div>
+              <div class="mini-usage"><div class="reset-label">下次重置时间</div><div class="reset-value">10-22 00:00</div><div class="reset-count">9 小时 30 分后</div><div class="quota"><div class="quota-line"><span>7 天窗口剩余</span><strong>$42.791</strong></div><div class="track"><span></span></div><div class="quota-note">已用 $157.21 / $200</div></div></div>
+            </div>
+            <div class="preview-caption">查询后，这里会显示真实结果</div>
+          </div>
         </div>
-        <div>
-          <h2 class="text-xl font-bold tracking-tight text-zinc-100">等待第一次探测</h2>
-          <p class="mt-2 text-sm text-zinc-500 leading-relaxed max-w-[46ch]">填入端点地址和密钥后点击查询。模型与用量信息会分开展示，长列表只在面板内部滚动。</p>
-        </div>
-        <div class="w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.06] bg-ink-900/90">
-          <div class="flex items-center gap-1.5 border-b border-white/[0.05] px-4 py-3"><span class="h-2.5 w-2.5 rounded-full bg-rose-400/40"></span><span class="h-2.5 w-2.5 rounded-full bg-amber-300/40"></span><span class="h-2.5 w-2.5 rounded-full bg-emerald-400/40"></span><span class="ml-2 font-mono text-[10px] text-zinc-600">request</span></div>
-          <pre class="overflow-x-auto scroll-slim p-5 font-mono text-[11px] leading-[1.9] text-zinc-500"><span class="text-emerald-300 font-medium">GET</span> /v1/models HTTP/1.1
-<span class="text-zinc-600">Host:</span> api.example.com
-<span class="text-zinc-600">Authorization:</span> Bearer sk-••••••••
-
-<span class="text-zinc-600">←</span> <span class="text-zinc-300">200 OK</span> · { <span class="text-zinc-400">"data"</span>: [ … ] }<span class="caret-blink text-emerald-400">▍</span></pre>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="text-[11px] text-zinc-600 mr-1">试试</span>
-          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30" data-url="https://api.openai.com/v1">api.openai.com</button>
-          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30" data-url="https://api.deepseek.com/v1">api.deepseek.com</button>
-          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1">dashscope</button>
+        <div class="quick-start">
+          <span class="quick-label">从一个常用端点开始</span>
+          <button class="preset-btn preset" data-url="https://api.openai.com/v1">api.openai.com</button>
+          <button class="preset-btn preset" data-url="https://api.deepseek.com/v1">api.deepseek.com</button>
+          <button class="preset-btn preset" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1">dashscope</button>
         </div>
       </div>
 
