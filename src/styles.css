@@ -286,8 +286,8 @@ summary:focus-visible {
 .key-expiry { color: var(--dim); font: 7px 'JetBrains Mono', monospace; }
 .key-link { margin: 0; padding: 0; border: 0; background: transparent; color: #82958a; display: inline-flex; align-items: center; gap: 3px; font-size: 9px; }
 .key-link:hover { color: var(--green); }
-.history { margin-top: auto; padding: 18px 18px 17px; }
-.history-title { color: var(--dim); font-size: 10px; margin: 0 0 7px; }
+.history { margin-top: auto; padding: 14px 18px; }
+.history-title { color: var(--dim); font-size: 10px; margin: 0 0 6px; }
 #history-list { display: flex; flex-direction: column; }
 #history-list li { border-top: 1px solid var(--line); }
 
@@ -477,6 +477,23 @@ summary:focus-visible {
   .search { flex-basis: 100%; }
   .tool-select { height: 35px; flex: 1; }
   .usage-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 较矮桌面窗口：收紧垂直间距，避免左侧配置区出现滚动条 */
+@media (min-width: 721px) and (max-height: 850px) {
+  .page { padding: 16px 20px; }
+  .topbar { margin-bottom: 16px; }
+  .section-head { min-height: 42px; }
+  .form { padding: 14px 18px; gap: 11px; }
+  .field { gap: 5px; }
+  .input { padding-top: 9px; padding-bottom: 9px; }
+  .query { padding-top: 10px; padding-bottom: 10px; }
+  .key-summary { padding-top: 10px; padding-bottom: 10px; }
+  .key-summary-head { margin-bottom: 6px; }
+  .key-reset { margin-top: 6px; padding-top: 6px; }
+  .key-footer { margin-top: 5px; }
+  .quota-progress { margin-top: 6px; margin-bottom: 4px; }
+  .history { padding-top: 10px; padding-bottom: 10px; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

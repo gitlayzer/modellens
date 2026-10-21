@@ -137,10 +137,10 @@
     const block = $('history-block'), list = $('history-list');
     block.classList.toggle('hidden', history.length === 0);
     list.innerHTML = '';
-    history.forEach((url) => {
+    history.slice(0, 3).forEach((url) => {
       const li = document.createElement('li');
-      li.innerHTML = `<button class="group flex w-full items-center gap-2 py-2.5 text-left" title="填入此地址">
-        <span class="min-w-0 flex-1 truncate font-mono text-[12px] text-zinc-500 group-hover:text-emerald-300 transition-colors">${escapeHtml(url)}</span>
+      li.innerHTML = `<button class="group flex w-full items-center gap-2 py-1.5 text-left" title="填入此地址">
+        <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-zinc-500 group-hover:text-emerald-300 transition-colors">${escapeHtml(url)}</span>
         <svg class="shrink-0 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
       </button>`;
       li.firstElementChild.addEventListener('click', () => { baseUrlEl.value = url; renderUrlPreview(); });
