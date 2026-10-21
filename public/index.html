@@ -31,7 +31,7 @@
       </div>
       <div><h1>Model Lens</h1><p>端点、模型与用量，一眼看清。</p></div>
     </div>
-    <div class="top-meta"><span class="live" id="connection-label">ENDPOINT PROBE</span><span class="version">v0.0.7</span></div>
+    <div class="top-meta"><span class="live" id="connection-label">ENDPOINT PROBE</span><span class="version">v0.0.8</span></div>
   </header>
 
   <main class="layout">
@@ -128,13 +128,18 @@
         </div>
       </div>
 
-      <div id="state-loading" class="state-pane hidden">
-        <div class="flex items-center gap-3 mb-7">
-          <span class="relative flex h-2 w-2"><span class="pulse-dot absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span></span>
-          <p class="font-mono text-[12px] text-zinc-400"><span id="loading-text" class="transition-opacity duration-200">正在规范化请求地址</span><span class="text-zinc-600"> …</span></p>
-        </div>
-        <div class="flex flex-col gap-2.5">
-          <div class="skeleton h-12 rounded-xl"></div><div class="skeleton h-12 rounded-xl w-[94%]"></div><div class="skeleton h-12 rounded-xl w-[88%]"></div><div class="skeleton h-12 rounded-xl w-[96%]"></div><div class="skeleton h-12 rounded-xl w-[82%]"></div><div class="skeleton h-12 rounded-xl w-[91%]"></div><div class="skeleton h-12 rounded-xl w-[86%]"></div>
+      <div id="state-loading" class="state-pane loading-state hidden" role="status" aria-live="polite">
+        <div class="loading-panel">
+          <div class="loading-visual" aria-hidden="true">
+            <span class="loading-orbit"></span>
+            <span class="loading-inner-ring"></span>
+            <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="12" r="3.5"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>
+          </div>
+          <h2>正在探测端点</h2>
+          <p class="loading-phase"><span id="loading-text">正在连接目标端点</span><span class="loading-dots" aria-hidden="true">…</span></p>
+          <p class="loading-url" id="loading-url"></p>
+          <div class="loading-track" aria-hidden="true"><span></span></div>
+          <p class="loading-note">模型列表与用量信息会一起返回</p>
         </div>
       </div>
 

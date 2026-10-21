@@ -129,7 +129,7 @@
   renderHistory();
 
   /* ---------- 加载态轮换文案 ---------- */
-  const LOADING_PHRASES = ['正在规范化请求地址', '正在连接目标端点', '等待上游响应', '正在解析模型列表', '正在探测用量接口'];
+  const LOADING_PHRASES = ['正在连接目标端点', '正在读取模型列表', '正在查询用量信息', '正在整理返回结果'];
   function startLoadingPhrases() {
     let i = 0;
     const el = $('loading-text');
@@ -465,6 +465,8 @@
     $('submit-btn').disabled = true;
     $('btn-label').textContent = '正在请求端点';
     $('key-summary').classList.add('hidden');
+    $('loading-url').textContent = baseUrl;
+    $('loading-url').title = baseUrl;
     startLoadingPhrases();
     showState('loading');
 

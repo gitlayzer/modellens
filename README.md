@@ -22,8 +22,9 @@
 ## 运行
 
 ```bash
-node server.js          # 默认 http://127.0.0.1:3777
-PORT=8080 node server.js  # 自定义端口
+node server.js               # 默认监听 0.0.0.0:3777，可直接用于容器部署
+PORT=8080 node server.js      # 自定义端口
+HOST=127.0.0.1 node server.js # 仅监听本机回环地址
 ```
 
 要求 Node.js >= 18（使用内置 fetch），零 npm 依赖。

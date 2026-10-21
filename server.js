@@ -6,6 +6,8 @@ const path = require('path');
 const zlib = require('zlib');
 
 const PORT = process.env.PORT || 3777;
+// 容器部署默认监听所有网卡；本地需要限制时可设 HOST=127.0.0.1
+const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const SECURITY_HEADERS = {
@@ -266,6 +268,6 @@ server.on('error', (err) => {
   throw err;
 });
 
-server.listen(PORT, () => {
-  console.log(`Model Lens 已启动: http://127.0.0.1:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Model Lens 已启动: http://${HOST}:${PORT}`);
 });
