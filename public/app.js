@@ -39,7 +39,20 @@
   /* ---------- 通用 ---------- */
   function showState(name) {
     Object.entries(states).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
+    const labels = { empty: 'ENDPOINT PROBE', loading: 'CONNECTING', error: 'CONNECTION FAILED', result: 'ENDPOINT CONNECTED' };
+    $('connection-label').textContent = labels[name] || 'ENDPOINT PROBE';
   }
+
+  function switchTab(name) {
+    ['models', 'billing'].forEach((n) => {
+      $(`${n}-view`).classList.toggle('active', n === name);
+      $(`${n}-tab`).classList.toggle('active', n === name);
+      $(`${n}-tab`).setAttribute('aria-selected', n === name ? 'true' : 'false');
+    });
+  }
+  $('models-tab').addEventListener('click', () => switchTab('models'));
+  $('billing-tab').addEventListener('click', () => switchTab('billing'));
+  $('key-billing-link').addEventListener('click', () => switchTab('billing'));
 
   function toast(msg) {
     const t = $('toast');
@@ -241,17 +254,13 @@
     return String(v);
   }
 
-  function renderUsage(usage) {
-    const card = $('usage-card');
-    if (!usage || !Array.isArray(usage.probes)) { card.classList.add('hidden'); return; }
-    card.classList.remove('hidden');
+  function money(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? `$${Number(n.toFixed(4)).toLocaleString()}` : '—';
+  }
 
-    const probes = usage.probes;
-    const okProbes = probes.filter((p) => p.ok && p.data && typeof p.data === 'object');
-    $('usage-probe-summary').textContent = `已探测 ${probes.length} 个接口 · ${okProbes.length} 个返回数据`;
-
-    // 1) 重置/到期时间：所有成功探测里找候选，优先展示未来最近的
-    const resetCandidates = [];
+  function collectResetCandidates(okProbes) {
+    const candidates = [];
     okProbes.forEach((p) => {
       const flat = [];
       flattenScalars(p.data, '', flat);
@@ -259,36 +268,114 @@
         if (!RESET_RE.test(f.key) || NOISE_RE.test(f.key)) return;
         const d = parseMaybeDate(f.value);
         if (d && d.getFullYear() > 2000 && d.getFullYear() < 2100) {
-          resetCandidates.push({ date: d, label: f.key, kind: p.kind });
+          candidates.push({ date: d, label: f.key, kind: p.kind });
         }
       });
     });
-    resetCandidates.sort((a, b) => a.date - b.date);
-    const future = resetCandidates.find((c) => c.date > Date.now());
-    const chosen = future || resetCandidates[resetCandidates.length - 1];
+    return candidates.sort((a, b) => a.date - b.date);
+  }
 
-    const resetBlock = $('usage-reset-block');
+  function renderKeySummary(okProbes, candidates, chosen, v1Probe) {
+    const card = $('key-summary');
+    const quotaSection = $('key-quota-section');
+    const resetSection = $('key-reset-section');
+    let hasQuota = false;
+
+    const rate = v1Probe?.data?.rate_limits?.[0];
+    const newApi = okProbes.find((p) => p.kind === 'newapi_self' && p.data?.data);
+    if (rate && Number.isFinite(Number(rate.remaining))) {
+      const remaining = Number(rate.remaining), used = Number(rate.used) || 0, limit = Number(rate.limit) || 0;
+      const percent = limit > 0 ? Math.max(0, Math.min(100, remaining / limit * 100)) : 0;
+      $('key-window-label').textContent = `${rate.window || '当前'} 窗口剩余`;
+      $('key-window-remaining').textContent = money(remaining);
+      $('key-quota-used').textContent = `已用 ${money(used)} / ${money(limit)}`;
+      $('key-quota-percent').textContent = `剩余 ${percent.toFixed(1)}%`;
+      $('key-quota-progress').style.width = `${percent}%`;
+      hasQuota = true;
+    } else if (newApi && Number.isFinite(Number(newApi.data.data.quota))) {
+      const data = newApi.data.data;
+      const remaining = Number(data.quota) / 500000;
+      const used = (Number(data.used_quota) || 0) / 500000;
+      const total = remaining + used;
+      const percent = total > 0 ? Math.max(0, Math.min(100, remaining / total * 100)) : 0;
+      $('key-window-label').textContent = '剩余额度';
+      $('key-window-remaining').textContent = money(remaining);
+      $('key-quota-used').textContent = `已用 ${money(used)} / ${money(total)}`;
+      $('key-quota-percent').textContent = total > 0 ? `剩余 ${percent.toFixed(1)}%` : '';
+      $('key-quota-progress').style.width = `${percent}%`;
+      hasQuota = true;
+    }
+    quotaSection.classList.toggle('hidden', !hasQuota);
+
     if (chosen) {
-      resetBlock.classList.remove('hidden');
-      $('usage-reset-label').textContent =
-        (future ? '下次重置时间' : '重置/到期时间') + (chosen.label ? ` · ${chosen.label}` : '');
-      $('usage-reset-time').textContent = formatDateTime(chosen.date);
-      $('usage-reset-countdown').textContent = formatCountdown(chosen.date);
-      // 其余时间候选（如密钥到期时间）以小字行列出
-      const othersBox = $('usage-reset-others');
-      const others = resetCandidates.filter((c) => c !== chosen).slice(0, 3);
-      othersBox.innerHTML = '';
-      others.forEach((c) => {
-        const row = document.createElement('div');
-        row.className = 'flex items-baseline justify-between gap-4 font-mono text-[11px] text-zinc-500';
-        row.innerHTML = `<span>${escapeHtml(c.label)}</span><span class="tabular-nums">${formatDateTime(c.date)} · ${formatCountdown(c.date)}</span>`;
-        othersBox.appendChild(row);
-      });
+      resetSection.classList.remove('hidden');
+      document.querySelector('#key-reset-section .key-reset-label').textContent =
+        /reset|renew|refresh/i.test(chosen.label) ? '下次重置' : '到期时间';
+      $('key-reset-time').textContent = formatDateTime(chosen.date).slice(0, 16);
+      $('key-reset-countdown').textContent = formatCountdown(chosen.date);
+      const expiry = candidates.find((c) => c !== chosen && /expire|access_until|valid_until/i.test(c.label));
+      $('key-expiry').textContent = expiry
+        ? `密钥 ${formatDateTime(expiry.date).slice(0, 10)} 到期 · ${formatCountdown(expiry.date)}`
+        : '';
     } else {
-      resetBlock.classList.add('hidden');
+      resetSection.classList.add('hidden');
     }
 
-    // 2) 额度/用量字段网格
+    const status = v1Probe?.data?.status;
+    $('key-status').textContent = status ? String(status).toUpperCase() : 'AVAILABLE';
+    card.classList.toggle('hidden', !hasQuota && !chosen);
+  }
+
+  function renderV1Overview(probe) {
+    const data = probe.data;
+    const rate = data.rate_limits?.[0];
+    const today = data.usage?.today;
+    const total = data.usage?.total;
+    $('usage-metrics').classList.remove('hidden');
+
+    if (rate) {
+      const remaining = Number(rate.remaining) || 0, used = Number(rate.used) || 0, limit = Number(rate.limit) || 0;
+      const usedPercent = limit > 0 ? Math.max(0, Math.min(100, used / limit * 100)) : 0;
+      $('metric-remaining-label').textContent = `${rate.window || '当前'} 窗口剩余`;
+      $('metric-remaining').textContent = money(remaining);
+      $('metric-remaining-note').textContent = `${rate.window || '当前窗口'} · 可继续使用`;
+      $('metric-used').textContent = money(used);
+      $('metric-used-note').textContent = `限额 ${money(limit)} · ${usedPercent.toFixed(1)}%`;
+      $('metric-used-progress').style.width = `${usedPercent}%`;
+    } else {
+      $('metric-remaining').textContent = '—';
+      $('metric-used').textContent = '—';
+      $('metric-remaining-note').textContent = '未返回窗口额度';
+      $('metric-used-note').textContent = '';
+      $('metric-used-progress').style.width = '0';
+    }
+
+    $('metric-today').textContent = money(today?.actual_cost ?? today?.cost);
+    $('metric-today-note').textContent = `${Number(today?.requests || 0).toLocaleString()} 次请求`;
+    $('metric-total').textContent = money(total?.actual_cost ?? total?.cost);
+    $('metric-total-note').textContent = `${Number(total?.requests || 0).toLocaleString()} 次请求`;
+
+    const daily = Array.isArray(data.daily_usage) ? data.daily_usage.slice(-14) : [];
+    const stats = Array.isArray(data.model_stats)
+      ? [...data.model_stats].sort((a, b) => (b.actual_cost ?? b.cost ?? 0) - (a.actual_cost ?? a.cost ?? 0)).slice(0, 3)
+      : [];
+    $('usage-analytics').classList.toggle('hidden', daily.length === 0 && stats.length === 0);
+    $('cost-chart').closest('.panel').classList.toggle('hidden', daily.length === 0);
+    $('model-cost-rank').closest('.panel').classList.toggle('hidden', stats.length === 0);
+
+    const maxCost = Math.max(...daily.map((d) => Number(d.actual_cost ?? d.cost) || 0), 0.01);
+    $('cost-chart').innerHTML = daily.map((d, i) => {
+      const cost = Number(d.actual_cost ?? d.cost) || 0;
+      const height = Math.max(5, cost / maxCost * 88);
+      const label = String(d.date || '').slice(5);
+      return `<div class="bar-wrap"><div class="bar${i === daily.length - 1 ? ' today' : ''}" style="height:${height}%" title="${money(cost)}"></div><span class="bar-label">${escapeHtml(label)}</span></div>`;
+    }).join('');
+
+    $('model-cost-rank').innerHTML = stats.map((m) => `
+      <div class="rank"><div><div class="rank-name">${escapeHtml(m.model || '未知模型')}</div><div class="rank-sub">${Number(m.requests || 0).toLocaleString()} 次请求</div></div><div class="rank-cost">${money(m.actual_cost ?? m.cost)}</div></div>`).join('');
+  }
+
+  function renderGenericUsageFields(okProbes) {
     const dl = $('usage-fields');
     dl.innerHTML = '';
     const seen = new Set();
@@ -298,27 +385,64 @@
       flattenScalars(p.data, '', flat);
       flat.forEach((f) => {
         if (!AMOUNT_RE.test(f.key) || NOISE_RE.test(f.key)) return;
-        if (RESET_RE.test(f.key) && parseMaybeDate(f.value)) return; // 时间类已进高亮块
-        if (typeof f.value === 'string' && parseMaybeDate(f.value)) return; // 网格里不放日期字符串
+        if (RESET_RE.test(f.key) && parseMaybeDate(f.value)) return;
+        if (typeof f.value === 'string' && parseMaybeDate(f.value)) return;
         const dedup = `${p.kind}:${f.path}`;
         if (seen.has(dedup)) return;
         seen.add(dedup);
         let label = FIELD_LABELS[f.key] || f.key;
         labelCount[label] = (labelCount[label] || 0) + 1;
-        // 同名字段（如 usage.today.cost 与 usage.total.cost）用路径区分
         if (labelCount[label] > 1) label = f.path.replace(/^data\./, '');
         const div = document.createElement('div');
-        div.className = 'min-w-0';
         div.innerHTML = `
-          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-600 truncate" title="${escapeHtml(p.kind)} · ${escapeHtml(f.path)}">${escapeHtml(label)}</dt>
+          <dt class="font-mono text-[10px] text-zinc-600 truncate" title="${escapeHtml(p.kind)} · ${escapeHtml(f.path)}">${escapeHtml(label)}</dt>
           <dd class="mt-1 font-mono text-[13px] text-zinc-200 tabular-nums break-all">${escapeHtml(formatFieldValue(p, f))}</dd>`;
         dl.appendChild(div);
       });
     });
+    dl.classList.toggle('hidden', dl.children.length === 0);
+  }
 
+  function renderUsage(usage) {
+    const probes = Array.isArray(usage?.probes) ? usage.probes : [];
+    const okProbes = probes.filter((p) => p.ok && p.data && typeof p.data === 'object');
+    const v1Probe = okProbes.find((p) => p.kind === 'v1_usage');
+    $('usage-probe-summary').textContent = `已探测 ${probes.length} 个接口 · ${okProbes.length} 个返回数据`;
     $('usage-empty').classList.toggle('hidden', okProbes.length > 0);
 
-    // 3) 每个探测源的状态 + 可折叠原始响应
+    const candidates = collectResetCandidates(okProbes);
+    const future = candidates.find((c) => c.date > Date.now());
+    const chosen = future || candidates[candidates.length - 1];
+    const resetBlock = $('usage-reset-block');
+    if (chosen) {
+      resetBlock.classList.remove('hidden');
+      const window = v1Probe?.data?.rate_limits?.[0]?.window;
+      $('usage-reset-label').textContent = window && /reset/i.test(chosen.label)
+        ? `${window} 窗口将在以下时间重置`
+        : `${future ? '下次重置时间' : '重置/到期时间'} · ${chosen.label}`;
+      $('usage-reset-time').textContent = formatDateTime(chosen.date);
+      $('usage-reset-countdown').textContent = formatCountdown(chosen.date);
+      const othersBox = $('usage-reset-others');
+      othersBox.innerHTML = '';
+      candidates.filter((c) => c !== chosen).slice(0, 3).forEach((c) => {
+        const row = document.createElement('div');
+        row.innerHTML = `<span>${escapeHtml(c.label)}</span><span class="tabular-nums">${formatDateTime(c.date)} · ${formatCountdown(c.date)}</span>`;
+        othersBox.appendChild(row);
+      });
+    } else {
+      resetBlock.classList.add('hidden');
+    }
+
+    renderKeySummary(okProbes, candidates, chosen, v1Probe);
+    if (v1Probe) {
+      $('usage-fields').classList.add('hidden');
+      renderV1Overview(v1Probe);
+    } else {
+      $('usage-metrics').classList.add('hidden');
+      $('usage-analytics').classList.add('hidden');
+      renderGenericUsageFields(okProbes);
+    }
+
     const box = $('usage-probes');
     box.innerHTML = '';
     probes.forEach((p) => {
@@ -333,7 +457,7 @@
         <span class="font-mono text-[10px] text-zinc-700 tabular-nums">${p.latencyMs} ms</span>`;
       if (p.ok) {
         row.innerHTML = `
-          <summary class="flex items-center justify-between gap-3 cursor-pointer px-3.5 py-2.5 list-none hover:bg-white/[0.02] rounded-lg transition-colors">${head}</summary>
+          <summary class="flex items-center justify-between gap-3 cursor-pointer px-3.5 py-2.5 list-none hover:bg-white/[0.02] rounded-lg">${head}</summary>
           <pre class="max-h-56 overflow-auto scroll-slim border-t border-white/[0.05] px-3.5 py-3 font-mono text-[11px] leading-relaxed text-zinc-500"></pre>`;
         row.querySelector('pre').textContent = JSON.stringify(p.data, null, 2);
       } else {
@@ -361,6 +485,7 @@
     querying = true;
     $('submit-btn').disabled = true;
     $('btn-label').textContent = '正在请求端点';
+    $('key-summary').classList.add('hidden');
     startLoadingPhrases();
     showState('loading');
 
@@ -397,6 +522,7 @@
       $('filter-input').value = '';
       renderModels();
       renderUsage(data.usage);
+      switchTab('models');
       showState('result');
       saveHistory(baseUrl);
     } catch (err) {
@@ -408,7 +534,7 @@
       querying = false;
       stopLoadingPhrases();
       $('submit-btn').disabled = false;
-      $('btn-label').textContent = '查询模型列表';
+      $('btn-label').textContent = states.result.classList.contains('hidden') ? '查询模型列表' : '重新查询';
     }
   });
 
@@ -422,22 +548,27 @@
     if (sort === 'created-desc') list = [...list].sort((a, b) => (b.created || 0) - (a.created || 0));
     if (sort === 'created-asc') list = [...list].sort((a, b) => (a.created || 0) - (b.created || 0));
 
+    $('raw-json').classList.add('hidden');
+    $('model-scroll').classList.remove('hidden');
+    $('model-table-head').classList.remove('hidden');
+    $('raw-toggle').textContent = '查看原始 JSON';
+
     const ul = $('model-list');
     ul.innerHTML = '';
     list.forEach((m, i) => {
       const created = formatCreated(m.created);
       const li = document.createElement('li');
-      li.className = 'row-in';
-      li.style.setProperty('--i', Math.min(i, 30));
-      li.innerHTML = `
-        <button title="点击复制模型 ID" class="group flex w-full items-center gap-4 px-2 py-3.5 text-left transition-colors duration-200 hover:bg-white/[0.03] active:scale-[0.995]">
-          <span class="shrink-0 w-8 text-right font-mono text-[11px] text-zinc-700 tabular-nums">${String(i + 1).padStart(2, '0')}</span>
-          <span class="min-w-0 flex-1 truncate font-mono text-[13px] text-zinc-200 group-hover:text-emerald-300 transition-colors">${escapeHtml(m.id)}</span>
-          ${m.owned_by ? `<span class="hidden sm:inline shrink-0 rounded-full border border-white/[0.08] px-2.5 py-0.5 font-mono text-[10px] text-zinc-500">${escapeHtml(m.owned_by)}</span>` : ''}
-          ${created ? `<span class="hidden md:inline shrink-0 font-mono text-[11px] text-zinc-600 tabular-nums">${created}</span>` : ''}
-          <svg class="shrink-0 text-zinc-700 group-hover:text-emerald-400 transition-colors" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>`;
-      li.firstElementChild.addEventListener('click', () => copyText(m.id, `已复制：${m.id}`));
+      const btn = document.createElement('button');
+      btn.className = 'model-row';
+      btn.title = '点击复制模型 ID';
+      btn.innerHTML = `
+        <span class="model-index">${String(i + 1).padStart(2, '0')}</span>
+        <span class="model-name">${escapeHtml(m.id)}</span>
+        ${m.owned_by ? `<span class="provider">${escapeHtml(m.owned_by)}</span>` : '<span></span>'}
+        ${created ? `<span class="date">${created}</span>` : '<span class="date"></span>'}
+        <svg class="copy" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+      btn.addEventListener('click', () => copyText(m.id, `已复制：${m.id}`));
+      li.appendChild(btn);
       ul.appendChild(li);
     });
 
@@ -470,8 +601,11 @@
 
   $('raw-toggle').addEventListener('click', () => {
     const raw = $('raw-json');
-    const hidden = raw.classList.toggle('hidden');
-    $('raw-toggle').textContent = hidden ? '查看原始 JSON' : '收起原始 JSON';
+    const showRaw = raw.classList.contains('hidden');
+    raw.classList.toggle('hidden', !showRaw);
+    $('model-scroll').classList.toggle('hidden', showRaw);
+    $('model-table-head').classList.toggle('hidden', showRaw);
+    $('raw-toggle').textContent = showRaw ? '返回模型列表' : '查看原始 JSON';
   });
 
   /* ---------- 键盘快捷键 ---------- */
@@ -486,6 +620,7 @@
     }
     if (e.key === '/' && !typing && !states.result.classList.contains('hidden')) {
       e.preventDefault();
+      switchTab('models');
       $('filter-input').focus();
       return;
     }

@@ -4,10 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Model Lens — 大模型 API 端点探测器</title>
-<meta name="description" content="输入任意 OpenAI 兼容端点的 Base URL 与密钥，即刻列出该端点支持的全部模型。兼容 /v1 与完整 /v1/models 两种写法，密钥仅经本地转发不落地。" />
+<meta name="description" content="输入任意 OpenAI 兼容端点的 Base URL 与密钥，即刻列出该端点支持的全部模型，并查看用量、额度与重置时间。" />
 <meta name="theme-color" content="#0a0a0c" />
 <meta property="og:title" content="Model Lens — 大模型 API 端点探测器" />
-<meta property="og:description" content="一个端点地址 + 一个密钥，看清它背后的全部模型。" />
+<meta property="og:description" content="端点、模型与用量，一眼看清。" />
 <meta property="og:type" content="website" />
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0a0c'/%3E%3Ccircle cx='16' cy='16' r='5.5' fill='none' stroke='%2334d399' stroke-width='2'/%3E%3Cpath d='M16 5v3.5M16 23.5V27M5 16h3.5M23.5 16H27' stroke='%2334d399' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
@@ -16,183 +16,127 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/assets/app.css" />
 </head>
-<body class="font-sans text-zinc-200 antialiased min-h-[100dvh]">
+<body class="font-sans text-zinc-200 antialiased">
 
-<!-- ===== 背景层：细网格 + 顶部微光 ===== -->
 <div aria-hidden="true" class="pointer-events-none fixed inset-0 z-0">
   <div class="absolute inset-0 bg-grid"></div>
   <div class="absolute inset-x-0 top-0 h-[480px] bg-glow"></div>
 </div>
 
-<div class="relative z-10 mx-auto max-w-[1400px] px-5 md:px-10 pt-10 md:pt-16 pb-16 flex flex-col min-h-[100dvh]">
-
-  <!-- ===== Header ===== -->
-  <header class="mb-12 md:mb-16 max-w-2xl row-in" style="--i:0">
-    <div class="flex items-center justify-between gap-4 mb-6">
-      <div class="flex items-center gap-2.5">
-        <span class="relative flex h-2 w-2">
-          <span class="pulse-dot absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span>
-          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
-        </span>
-        <span class="font-mono text-[11px] uppercase tracking-[0.22em] text-emerald-400/90">OpenAI-Compatible Endpoint Probe</span>
+<div class="page relative z-10">
+  <header class="topbar row-in" style="--i:0">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </div>
-      <span class="hidden sm:inline-flex items-center rounded-full border border-white/[0.07] bg-ink-900 px-2.5 py-1 font-mono text-[10px] text-zinc-500">v1.1</span>
+      <div><h1>Model Lens</h1><p>端点、模型与用量，一眼看清。</p></div>
     </div>
-    <h1 class="text-4xl md:text-6xl font-extrabold tracking-tighter leading-none text-zinc-50">
-      Model Lens<span class="text-emerald-400">.</span>
-    </h1>
-    <p class="mt-5 text-base text-zinc-500 leading-relaxed max-w-[52ch]">
-      一个端点地址 + 一个密钥，看清它背后的全部模型。
-      兼容 <span class="font-mono text-[13px] text-zinc-400">/v1</span> 与完整 <span class="font-mono text-[13px] text-zinc-400">/v1/models</span> 两种写法，地址不规范会自动修正。
-    </p>
+    <div class="top-meta"><span class="live" id="connection-label">ENDPOINT PROBE</span><span class="version">v0.0.3</span></div>
   </header>
 
-  <!-- ===== Main asymmetric grid ===== -->
-  <div class="grid grid-cols-1 lg:grid-cols-[minmax(360px,430px)_1fr] gap-8 lg:gap-12 items-start flex-1">
-
-    <!-- ===== Left: Config panel ===== -->
-    <section class="lg:sticky lg:top-8 row-in" style="--i:1">
-      <div class="rounded-3xl border border-white/[0.06] bg-ink-900/80 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.04)]">
-        <div class="flex items-center justify-between border-b border-white/[0.05] px-6 py-4">
-          <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">请求配置</span>
-          <span class="font-mono text-[10px] text-zinc-600">GET · /models</span>
+  <main class="layout">
+    <aside class="config row-in" style="--i:1">
+      <div class="section-head"><span>请求配置</span><span class="method">GET · /models</span></div>
+      <form id="query-form" class="form" novalidate>
+        <div class="field">
+          <label for="base-url">Base URL</label>
+          <div class="input-wrap">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+            <input id="base-url" class="input" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="https://api.example.com/v1" />
+          </div>
+          <div class="url-preview">实际请求 → <span id="url-preview">等待输入…</span></div>
+          <p id="url-error" class="hidden text-xs text-rose-400"></p>
         </div>
 
-        <form id="query-form" class="p-6 flex flex-col gap-6" novalidate>
-
-          <div class="flex flex-col gap-2">
-            <label for="base-url" class="text-[13px] font-medium text-zinc-400">Base URL</label>
-            <div class="relative">
-              <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-              <input id="base-url" type="text" spellcheck="false" autocomplete="off" autocapitalize="off"
-                placeholder="https://api.example.com/v1"
-                class="w-full rounded-xl bg-ink-850 border border-white/[0.07] pl-10 pr-4 py-3 font-mono text-[13px] text-zinc-100 placeholder:text-zinc-600
-                       shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition-all duration-300
-                       hover:border-white/[0.12] focus:border-emerald-400/50 focus:bg-ink-800 focus:ring-1 focus:ring-emerald-400/25" />
-            </div>
-            <p class="font-mono text-[11px] leading-relaxed">
-              <span class="text-zinc-600">实际请求 → </span><span id="url-preview" class="text-emerald-300/70 break-all">等待输入…</span>
-            </p>
-            <p id="url-error" class="hidden text-xs text-rose-400"></p>
+        <div class="field">
+          <label for="api-key">API Key</label>
+          <div class="input-wrap">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l3 3"/></svg>
+            <input id="api-key" class="input pr-9" type="password" spellcheck="false" autocomplete="off" placeholder="sk-..." />
+            <button type="button" id="toggle-key" aria-label="显示或隐藏密钥" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors">
+              <svg id="eye-open" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg id="eye-closed" class="hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.9 4.24A9.5 9.5 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.16 3.19M6.61 6.61A16.9 16.9 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+            </button>
           </div>
+          <div class="hint">密钥只经本地服务转发，不会被存储。</div>
+        </div>
 
-          <div class="flex flex-col gap-2">
-            <label for="api-key" class="text-[13px] font-medium text-zinc-400">API Key</label>
-            <div class="relative">
-              <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-              <input id="api-key" type="password" spellcheck="false" autocomplete="off"
-                placeholder="sk-..."
-                class="w-full rounded-xl bg-ink-850 border border-white/[0.07] pl-10 pr-12 py-3 font-mono text-[13px] text-zinc-100 placeholder:text-zinc-600
-                       shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] outline-none transition-all duration-300
-                       hover:border-white/[0.12] focus:border-emerald-400/50 focus:bg-ink-800 focus:ring-1 focus:ring-emerald-400/25" />
-              <button type="button" id="toggle-key" aria-label="显示或隐藏密钥"
-                class="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40">
-                <svg id="eye-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                <svg id="eye-closed" class="hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.5 9.5 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.16 3.19M6.61 6.61A16.9 16.9 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/></svg>
-              </button>
-            </div>
-            <p class="text-xs text-zinc-600 leading-relaxed">密钥只经本地服务转发到目标端点，不会被存储。</p>
+        <div class="field">
+          <span class="field-label">鉴权请求头</span>
+          <div class="auth-switch relative" role="tablist" aria-label="鉴权方式">
+            <span id="seg-pill" class="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-lg bg-zinc-100 transition-transform duration-300"></span>
+            <button type="button" data-header="authorization" class="header-tab relative z-10 rounded-lg px-3 py-2 font-mono text-[12px]">Authorization</button>
+            <button type="button" data-header="x-api-key" class="header-tab relative z-10 rounded-lg px-3 py-2 font-mono text-[12px]">x-api-key</button>
           </div>
+          <p id="header-preview" class="hint font-mono truncate"></p>
+        </div>
 
-          <div class="flex flex-col gap-2">
-            <span class="text-[13px] font-medium text-zinc-400">鉴权请求头</span>
-            <div class="relative grid grid-cols-2 rounded-xl bg-ink-850 border border-white/[0.07] p-1" role="tablist" aria-label="鉴权方式">
-              <span id="seg-pill" class="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-lg bg-zinc-100 transition-transform duration-300 ease-[cubic-bezier(.16,1,.3,1)]"></span>
-              <button type="button" data-header="authorization"
-                class="header-tab relative z-10 rounded-lg px-3 py-2 font-mono text-[12px] transition-colors duration-300 active:scale-[0.98] focus-visible:outline-none">
-                Authorization
-              </button>
-              <button type="button" data-header="x-api-key"
-                class="header-tab relative z-10 rounded-lg px-3 py-2 font-mono text-[12px] transition-colors duration-300 active:scale-[0.98] focus-visible:outline-none">
-                x-api-key
-              </button>
-            </div>
-            <p id="header-preview" class="font-mono text-[11px] text-zinc-600 truncate"></p>
-          </div>
+        <button id="submit-btn" class="query" type="submit">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <span id="btn-label">查询模型列表</span>
+          <kbd class="hidden md:inline text-[9px] opacity-60">⌘⏎</kbd>
+        </button>
+      </form>
 
-          <button id="submit-btn" type="submit"
-            class="group inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-5 py-3.5
-                   text-[14px] font-bold text-ink-950 transition-all duration-300
-                   hover:bg-emerald-300 active:scale-[0.98] active:-translate-y-[1px]
-                   disabled:opacity-50 disabled:pointer-events-none
-                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900">
-            <svg id="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <span id="btn-label">查询模型列表</span>
-            <kbd class="hidden md:inline-flex items-center gap-0.5 rounded-md bg-ink-950/15 px-1.5 py-0.5 font-mono text-[10px] font-medium">⌘⏎</kbd>
-          </button>
-        </form>
+      <section id="key-summary" class="key-summary hidden" aria-label="当前 Key 摘要">
+        <div class="key-summary-head"><span class="key-summary-title">当前 Key</span><span class="key-state" id="key-status">ACTIVE</span></div>
+        <div id="key-quota-section">
+          <div class="quota-main"><span id="key-window-label">窗口剩余</span><strong id="key-window-remaining">—</strong></div>
+          <div class="quota-progress"><span id="key-quota-progress" style="width:0"></span></div>
+          <div class="quota-meta"><span id="key-quota-used">—</span><span id="key-quota-percent"></span></div>
+        </div>
+        <div id="key-reset-section" class="key-reset">
+          <div class="key-reset-line"><span class="key-reset-label">下次重置</span><span class="key-reset-count" id="key-reset-countdown"></span></div>
+          <div class="key-reset-time" id="key-reset-time"></div>
+          <div class="key-footer"><span class="key-expiry" id="key-expiry"></span><button class="key-link" id="key-billing-link" type="button">计费详情<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 5 7 7-7 7"/></svg></button></div>
+        </div>
+      </section>
+
+      <div id="history-block" class="history hidden">
+        <p class="history-title">最近查询</p>
+        <ul id="history-list"></ul>
       </div>
+    </aside>
 
-      <!-- 最近查询历史 -->
-      <div id="history-block" class="hidden mt-8">
-        <p class="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-600 mb-3 px-1">最近查询</p>
-        <ul id="history-list" class="flex flex-col divide-y divide-white/[0.05] border-t border-b border-white/[0.05]"></ul>
-      </div>
-    </section>
-
-    <!-- ===== Right: Results ===== -->
-    <section class="min-w-0 row-in" style="--i:2">
-
-      <!-- Empty state -->
-      <div id="state-empty" class="flex flex-col items-start gap-7 rounded-[2rem] border border-dashed border-white/[0.08] px-7 py-14 md:px-12 md:py-16">
-        <div class="rounded-2xl bg-ink-850 border border-white/[0.06] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
+    <section class="workspace row-in" style="--i:2">
+      <div id="state-empty" class="state-pane">
+        <div class="rounded-2xl bg-ink-850 border border-white/[0.06] p-4">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.5"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
         </div>
         <div>
           <h2 class="text-xl font-bold tracking-tight text-zinc-100">等待第一次探测</h2>
-          <p class="mt-2 text-sm text-zinc-500 leading-relaxed max-w-[46ch]">
-            在左侧填入端点地址和密钥后点击查询。结果会展示模型 ID、提供方与创建时间，点击任意一行即可复制模型 ID。
-          </p>
+          <p class="mt-2 text-sm text-zinc-500 leading-relaxed max-w-[46ch]">填入端点地址和密钥后点击查询。模型与用量信息会分开展示，长列表只在面板内部滚动。</p>
         </div>
-
-        <!-- 伪终端预览 -->
-        <div class="w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.06] bg-ink-900/90 shadow-[0_16px_40px_-24px_rgba(0,0,0,0.7)]">
-          <div class="flex items-center gap-1.5 border-b border-white/[0.05] px-4 py-3">
-            <span class="h-2.5 w-2.5 rounded-full bg-rose-400/40"></span>
-            <span class="h-2.5 w-2.5 rounded-full bg-amber-300/40"></span>
-            <span class="h-2.5 w-2.5 rounded-full bg-emerald-400/40"></span>
-            <span class="ml-2 font-mono text-[10px] text-zinc-600">request</span>
-          </div>
+        <div class="w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.06] bg-ink-900/90">
+          <div class="flex items-center gap-1.5 border-b border-white/[0.05] px-4 py-3"><span class="h-2.5 w-2.5 rounded-full bg-rose-400/40"></span><span class="h-2.5 w-2.5 rounded-full bg-amber-300/40"></span><span class="h-2.5 w-2.5 rounded-full bg-emerald-400/40"></span><span class="ml-2 font-mono text-[10px] text-zinc-600">request</span></div>
           <pre class="overflow-x-auto scroll-slim p-5 font-mono text-[11px] leading-[1.9] text-zinc-500"><span class="text-emerald-300 font-medium">GET</span> /v1/models HTTP/1.1
 <span class="text-zinc-600">Host:</span> api.example.com
 <span class="text-zinc-600">Authorization:</span> Bearer sk-••••••••
 
 <span class="text-zinc-600">←</span> <span class="text-zinc-300">200 OK</span> · { <span class="text-zinc-400">"data"</span>: [ … ] }<span class="caret-blink text-emerald-400">▍</span></pre>
         </div>
-
         <div class="flex flex-wrap items-center gap-2">
-          <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-600 mr-1">试试</span>
-          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30 transition-colors active:scale-[0.97]" data-url="https://api.openai.com/v1">api.openai.com</button>
-          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30 transition-colors active:scale-[0.97]" data-url="https://api.deepseek.com/v1">api.deepseek.com</button>
-          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30 transition-colors active:scale-[0.97]" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1">dashscope</button>
+          <span class="text-[11px] text-zinc-600 mr-1">试试</span>
+          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30" data-url="https://api.openai.com/v1">api.openai.com</button>
+          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30" data-url="https://api.deepseek.com/v1">api.deepseek.com</button>
+          <button class="preset-btn rounded-full border border-white/[0.08] px-3.5 py-1.5 font-mono text-[11px] text-zinc-400 hover:text-emerald-300 hover:border-emerald-400/30" data-url="https://dashscope.aliyuncs.com/compatible-mode/v1">dashscope</button>
         </div>
       </div>
 
-      <!-- Loading skeleton -->
-      <div id="state-loading" class="hidden">
+      <div id="state-loading" class="state-pane hidden">
         <div class="flex items-center gap-3 mb-7">
-          <span class="relative flex h-2 w-2">
-            <span class="pulse-dot absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span>
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
-          </span>
+          <span class="relative flex h-2 w-2"><span class="pulse-dot absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span></span>
           <p class="font-mono text-[12px] text-zinc-400"><span id="loading-text" class="transition-opacity duration-200">正在规范化请求地址</span><span class="text-zinc-600"> …</span></p>
         </div>
         <div class="flex flex-col gap-2.5">
-          <div class="skeleton h-12 rounded-xl"></div>
-          <div class="skeleton h-12 rounded-xl w-[94%]"></div>
-          <div class="skeleton h-12 rounded-xl w-[88%]"></div>
-          <div class="skeleton h-12 rounded-xl w-[96%]"></div>
-          <div class="skeleton h-12 rounded-xl w-[82%]"></div>
-          <div class="skeleton h-12 rounded-xl w-[91%]"></div>
-          <div class="skeleton h-12 rounded-xl w-[86%]"></div>
+          <div class="skeleton h-12 rounded-xl"></div><div class="skeleton h-12 rounded-xl w-[94%]"></div><div class="skeleton h-12 rounded-xl w-[88%]"></div><div class="skeleton h-12 rounded-xl w-[96%]"></div><div class="skeleton h-12 rounded-xl w-[82%]"></div><div class="skeleton h-12 rounded-xl w-[91%]"></div><div class="skeleton h-12 rounded-xl w-[86%]"></div>
         </div>
       </div>
 
-      <!-- Error state -->
-      <div id="state-error" class="hidden rounded-[2rem] border border-rose-400/20 bg-rose-400/[0.04] px-7 py-9 md:px-9">
-        <div class="flex items-start gap-4">
+      <div id="state-error" class="state-pane hidden">
+        <div class="rounded-2xl border border-rose-400/20 bg-rose-400/[0.04] p-6 flex items-start gap-4">
           <div class="shrink-0 rounded-xl bg-rose-400/10 border border-rose-400/20 p-3">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.5"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
           </div>
           <div class="min-w-0 flex-1">
             <h2 class="text-lg font-bold tracking-tight text-rose-300">查询失败</h2>
@@ -203,105 +147,71 @@
         </div>
       </div>
 
-      <!-- Success state -->
-      <div id="state-result" class="hidden">
-        <div class="mb-8 flex flex-col gap-4">
-          <div class="flex flex-wrap items-baseline gap-x-5 gap-y-2">
-            <span class="text-4xl font-extrabold tracking-tighter text-zinc-50 tabular-nums" id="meta-count">0</span>
-            <span class="text-base font-medium text-zinc-500">个模型<span id="meta-owners"></span></span>
-            <span id="meta-status" class="rounded-full border border-emerald-400/25 bg-emerald-400/[0.07] px-2.5 py-1 font-mono text-[11px] text-emerald-300"></span>
-            <span id="meta-latency" class="font-mono text-[11px] text-zinc-500 tabular-nums"></span>
-          </div>
-          <button id="meta-url" title="点击复制请求地址"
-            class="group self-start inline-flex items-center gap-2 max-w-full rounded-lg bg-ink-850 border border-white/[0.06] px-3 py-1.5 font-mono text-[12px] text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12] transition-colors active:scale-[0.98]">
-            <svg class="shrink-0 text-emerald-400/70" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            <span id="meta-url-text" class="truncate"></span>
-          </button>
+      <div id="state-result" class="result-state hidden">
+        <div class="endpoint">
+          <svg class="endpoint-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+          <button id="meta-url" class="endpoint-url text-left" title="点击复制请求地址"><span id="meta-url-text"></span></button>
+          <span id="meta-status" class="status"></span><span id="meta-latency" class="latency"></span>
+        </div>
+        <div class="tabs" role="tablist" aria-label="查询结果">
+          <button class="tab active" id="models-tab" role="tab" aria-selected="true" aria-controls="models-view">模型 <span class="tab-count" id="meta-count">0</span><span id="meta-owners" class="hidden"></span></button>
+          <button class="tab" id="billing-tab" role="tab" aria-selected="false" aria-controls="billing-view">用量与计费</button>
         </div>
 
-        <!-- 用量 / 额度卡片 -->
-        <div id="usage-card" class="hidden mb-8 rounded-2xl border border-white/[0.06] bg-ink-900/80 shadow-[0_16px_40px_-24px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.04)]">
-          <div class="flex items-center justify-between border-b border-white/[0.05] px-5 py-3.5">
-            <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">用量 / 额度</span>
-            <span id="usage-probe-summary" class="font-mono text-[10px] text-zinc-600"></span>
-          </div>
-          <div class="p-5 flex flex-col gap-5">
-            <!-- 重置时间（核心信息，高亮） -->
-            <div id="usage-reset-block" class="hidden rounded-xl border border-emerald-400/20 bg-emerald-400/[0.05] px-4 py-3.5">
-              <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                <div class="min-w-0">
-                  <p class="font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-400/80 mb-1" id="usage-reset-label">下次重置时间</p>
-                  <p id="usage-reset-time" class="font-mono text-[15px] font-semibold text-emerald-300 tabular-nums"></p>
-                </div>
-                <p id="usage-reset-countdown" class="font-mono text-[12px] text-emerald-200/70 tabular-nums"></p>
-              </div>
-              <div id="usage-reset-others" class="mt-2.5 flex flex-col gap-1"></div>
+        <div class="view active" id="models-view" role="tabpanel" aria-labelledby="models-tab">
+          <div class="toolbar">
+            <div class="search">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+              <input id="filter-input" type="text" placeholder="筛选模型 ID，例如 gpt-4o" />
+              <kbd class="absolute right-3 top-1/2 -translate-y-1/2 rounded border border-white/[0.08] px-1.5 py-0.5 font-mono text-[9px] text-zinc-600">/</kbd>
             </div>
-            <p id="usage-empty" class="hidden text-[13px] text-zinc-600">未获取到用量信息——该端点可能不开放用量查询接口。</p>
-            <!-- 关键字段网格 -->
-            <dl id="usage-fields" class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4"></dl>
-            <!-- 各探测源原始响应 -->
-            <div id="usage-probes" class="flex flex-col gap-2"></div>
+            <select id="sort-select" class="tool-select" aria-label="排序方式"><option value="default">默认排序</option><option value="name">按名称 A→Z</option><option value="created-desc">创建时间（新→旧）</option><option value="created-asc">创建时间（旧→新）</option></select>
+            <button id="copy-all" class="icon-btn" title="复制全部模型 ID"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <button id="export-json" class="icon-btn" title="导出原始 JSON"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12m-5-5 5 5 5-5M4 19h16"/></svg></button>
           </div>
+          <div class="table-head" id="model-table-head"><span></span><span>模型 ID</span><span>提供方</span><span>创建时间</span><span></span></div>
+          <div class="model-scroll scroll-slim" id="model-scroll"><ul id="model-list"></ul><p id="filter-empty" class="hidden py-14 text-center text-sm text-zinc-600">没有匹配筛选条件的模型</p></div>
+          <pre id="raw-json" class="raw-json hidden scroll-slim"></pre>
+          <div class="list-footer"><span><span id="visible-count">0</span> / <span id="total-count">0</span> 条可见</span><button id="raw-toggle" class="hover:text-emerald-300">查看原始 JSON</button></div>
         </div>
 
-        <div class="mb-5 flex flex-col sm:flex-row gap-3">
-          <div class="relative flex-1">
-            <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input id="filter-input" type="text" placeholder="筛选模型 ID，例如 gpt-4o"
-              class="w-full rounded-xl bg-ink-850 border border-white/[0.07] pl-10 pr-10 py-2.5 font-mono text-[12px] text-zinc-100 placeholder:text-zinc-600 outline-none transition-all duration-300 hover:border-white/[0.12] focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/25" />
-            <kbd class="absolute right-3 top-1/2 -translate-y-1/2 rounded-md border border-white/[0.08] bg-ink-900 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 pointer-events-none">/</kbd>
-          </div>
-          <select id="sort-select" aria-label="排序方式"
-            class="rounded-xl bg-ink-850 border border-white/[0.07] px-4 py-2.5 text-[12px] text-zinc-300 outline-none transition-all duration-300 hover:border-white/[0.12] focus:border-emerald-400/50 cursor-pointer">
-            <option value="default">默认排序</option>
-            <option value="name">按名称 A→Z</option>
-            <option value="created-desc">按创建时间（新→旧）</option>
-            <option value="created-asc">按创建时间（旧→新）</option>
-          </select>
-          <div class="flex gap-2">
-            <button id="copy-all" title="复制全部模型 ID"
-              class="inline-flex items-center gap-2 rounded-xl border border-white/[0.07] bg-ink-850 px-4 py-2.5 text-[12px] font-medium text-zinc-400 hover:text-zinc-200 hover:border-white/[0.14] transition-all active:scale-[0.97]">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              复制全部
-            </button>
-            <button id="export-json" title="下载原始响应 JSON"
-              class="inline-flex items-center gap-2 rounded-xl border border-white/[0.07] bg-ink-850 px-4 py-2.5 text-[12px] font-medium text-zinc-400 hover:text-zinc-200 hover:border-white/[0.14] transition-all active:scale-[0.97]">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
-              导出
-            </button>
+        <div class="view" id="billing-view" role="tabpanel" aria-labelledby="billing-tab">
+          <div class="billing-scroll scroll-slim">
+            <div id="usage-reset-block" class="reset-panel hidden">
+              <div><div class="reset-label" id="usage-reset-label">下次重置时间</div><div class="reset-time" id="usage-reset-time"></div></div>
+              <div class="countdown" id="usage-reset-countdown"></div>
+              <div id="usage-reset-others" class="expiry"></div>
+            </div>
+
+            <div id="usage-metrics" class="metrics hidden">
+              <div class="metric primary"><div class="metric-label" id="metric-remaining-label">窗口剩余</div><div class="metric-value" id="metric-remaining">—</div><div class="metric-note" id="metric-remaining-note"></div></div>
+              <div class="metric"><div class="metric-label">窗口已用</div><div class="metric-value" id="metric-used">—</div><div class="progress"><span id="metric-used-progress" style="width:0"></span></div><div class="metric-note" id="metric-used-note"></div></div>
+              <div class="metric"><div class="metric-label">今日费用</div><div class="metric-value" id="metric-today">—</div><div class="metric-note" id="metric-today-note"></div></div>
+              <div class="metric"><div class="metric-label">累计费用</div><div class="metric-value" id="metric-total">—</div><div class="metric-note" id="metric-total-note"></div></div>
+            </div>
+
+            <div id="usage-analytics" class="analytics hidden">
+              <div class="panel"><div class="panel-title">最近 14 天费用<span>USD / DAY</span></div><div class="chart" id="cost-chart"></div></div>
+              <div class="panel"><div class="panel-title">模型费用排行<span>累计</span></div><div class="rank-list" id="model-cost-rank"></div></div>
+            </div>
+
+            <p id="usage-empty" class="hidden text-[13px] text-zinc-600 py-5">未获取到用量信息——该端点可能不开放用量查询接口。</p>
+            <dl id="usage-fields" class="usage-fields hidden"></dl>
+
+            <details class="probe-details">
+              <summary class="probe-summary"><span id="usage-probe-summary">尚未探测用量接口</span><span>查看详情</span></summary>
+              <div id="usage-probes" class="flex flex-col gap-2 mt-2"></div>
+            </details>
           </div>
         </div>
-
-        <ul id="model-list" class="flex flex-col divide-y divide-white/[0.05] border-t border-b border-white/[0.05]"></ul>
-        <p id="filter-empty" class="hidden py-14 text-center text-sm text-zinc-600">没有匹配筛选条件的模型</p>
-
-        <div class="mt-7 flex items-center justify-between">
-          <p class="font-mono text-[11px] text-zinc-600 tabular-nums"><span id="visible-count">0</span> / <span id="total-count">0</span> 条可见</p>
-          <button id="raw-toggle" class="font-mono text-[11px] text-zinc-500 hover:text-emerald-300 transition-colors underline underline-offset-4 decoration-white/10 hover:decoration-emerald-400/40">查看原始 JSON</button>
-        </div>
-        <pre id="raw-json" class="hidden mt-4 max-h-[420px] overflow-auto scroll-slim rounded-2xl bg-ink-900 border border-white/[0.06] p-5 font-mono text-[11px] leading-relaxed text-zinc-400"></pre>
       </div>
-
     </section>
-  </div>
-
-  <!-- ===== Footer ===== -->
-  <footer class="mt-16 border-t border-white/[0.05] pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 row-in" style="--i:3">
-    <p class="font-mono text-[11px] text-zinc-600">Model Lens — 密钥仅经本地服务转发，不会被存储</p>
-    <div class="flex items-center gap-4 font-mono text-[10px] text-zinc-700">
-      <span class="inline-flex items-center gap-1.5"><kbd class="rounded border border-white/[0.08] px-1.5 py-0.5">⌘⏎</kbd> 提交</span>
-      <span class="inline-flex items-center gap-1.5"><kbd class="rounded border border-white/[0.08] px-1.5 py-0.5">/</kbd> 筛选</span>
-      <span class="inline-flex items-center gap-1.5"><kbd class="rounded border border-white/[0.08] px-1.5 py-0.5">Esc</kbd> 清空</span>
-    </div>
-  </footer>
+  </main>
 </div>
 
-<!-- copy toast -->
 <div id="toast" role="status" class="pointer-events-none fixed bottom-8 left-1/2 z-50 -translate-x-1/2 translate-y-4 opacity-0 transition-all duration-300">
   <div class="rounded-full border border-white/10 bg-zinc-100 px-4 py-2 font-mono text-[12px] font-medium text-ink-950 shadow-[0_8px_30px_rgba(0,0,0,0.5)]"></div>
 </div>
-
 <script src="/app.js"></script>
 </body>
 </html>
