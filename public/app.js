@@ -16,26 +16,6 @@
   let history = [];
   try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { history = []; }
 
-  /* ---------- 与服务端一致的 URL 规范化（用于实时预览） ---------- */
-  function normalizeUrl(input) {
-    let u = String(input || '').trim().replace(/\/+$/, '');
-    if (!u) return '';
-    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
-    if (/\/models$/i.test(u)) return u;
-    if (/\/v\d+[a-z0-9]*$/i.test(u)) return u + '/models';
-    return u + '/v1/models';
-  }
-
-  function renderUrlPreview() {
-    const preview = $('url-preview');
-    const normalized = normalizeUrl(baseUrlEl.value);
-    preview.textContent = normalized || '等待输入…';
-    preview.classList.toggle('text-emerald-300/70', !!normalized);
-    preview.classList.toggle('text-zinc-600', !normalized);
-  }
-  baseUrlEl.addEventListener('input', renderUrlPreview);
-  renderUrlPreview();
-
   /* ---------- 通用 ---------- */
   function showState(name) {
     Object.entries(states).forEach(([k, el]) => el.classList.toggle('hidden', k !== name));
@@ -122,7 +102,6 @@
   document.querySelectorAll('.preset-btn').forEach((btn) =>
     btn.addEventListener('click', () => {
       baseUrlEl.value = btn.dataset.url;
-      renderUrlPreview();
       apiKeyEl.focus();
     }));
 
@@ -143,7 +122,7 @@
         <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-zinc-500 group-hover:text-emerald-300 transition-colors">${escapeHtml(url)}</span>
         <svg class="shrink-0 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
       </button>`;
-      li.firstElementChild.addEventListener('click', () => { baseUrlEl.value = url; renderUrlPreview(); });
+      li.firstElementChild.addEventListener('click', () => { baseUrlEl.value = url; });
       list.appendChild(li);
     });
   }
